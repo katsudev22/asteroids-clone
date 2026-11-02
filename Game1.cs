@@ -47,7 +47,7 @@ public class Game1 : Game
     {
         Globals.GraphicsDevice.Clear(Color.Black);
 
-        Globals.SpriteBatch.Begin(samplerState: SamplerState.PointClamp, transformMatrix: Globals.GameMatrix);
+        Globals.SpriteBatch.Begin(samplerState: SamplerState.PointClamp);
         _gameManager.Draw();
         Globals.SpriteBatch.End();
 

@@ -32,6 +32,17 @@ public static class Globals
                      Matrix.CreateScale(zoom, zoom, 1f) *
                      Matrix.CreateTranslation(center.X, center.Y , 0);
     }
+
+    public static void DrawLine(Vector2 firstPoint, Vector2 secondPoint)
+    {
+        Texture2D pixel = new(GraphicsDevice, 1, 1);
+        pixel.SetData([Color.White]);
+
+        float distance = Vector2.Distance(firstPoint, secondPoint);
+        float angle = (float)Math.Atan2(secondPoint.Y - firstPoint.Y, secondPoint.X - firstPoint.X);
+
+        SpriteBatch.Draw(pixel, firstPoint, null, Color.White, angle, Vector2.Zero, new Vector2(distance, 1f), SpriteEffects.None, 0f);
+    }
 }
 
 public class InputManager
@@ -110,7 +121,6 @@ public class GameManager
 
 public class Player
 {
-    public Texture2D Texture { get; private set; }
     public Vector2 Position { get; private set; }
     public Rectangle Bounds { get; private set; }
     public float Rotation { get; private set; }
@@ -123,7 +133,6 @@ public class Player
 
     public Player(Vector2 position)
     {
-        Texture = Globals.ContentManager.Load<Texture2D>("player");
         Position = position;
         Bounds = new((int)Position.X, (int)Position.Y, 50, 50);
         Rotation = 0f;
@@ -139,7 +148,6 @@ public class Player
         if (Speed > _maxSpeed) Speed = _maxSpeed;
 
         Position += Direction * Speed * Globals.Time;
-        UpdateBounds();
 
         _fireRate += Globals.Time;
 
@@ -149,7 +157,14 @@ public class Player
 
     public void Draw()
     {
-        Globals.SpriteBatch.Draw(Texture, Position, null, Color.White, Rotation, new(Texture.Width / 2, Texture.Height / 2), 1f, SpriteEffects.None, 0f);
+        Vector2 centerPoint = Position;
+
+        Vector2 firstPoint = new(centerPoint.X + 30, centerPoint.Y);
+        Vector2 secondPoint = new(centerPoint.X, centerPoint.Y - 10);
+        Vector2 thirdPoint = new(centerPoint.X, centerPoint.Y + 10);
+
+        Globals.DrawLine(firstPoint, secondPoint);
+        Globals.DrawLine(firstPoint, thirdPoint);
 
         foreach (Bullet bullet in Bullets) bullet.Draw();
     }
@@ -171,9 +186,6 @@ public class Player
 
         _fireRate = 0f;
     }
-
-    private void UpdateBounds() =>
-        Bounds = new((int)Position.X, (int)Position.Y, Texture.Width / 2, Texture.Height / 2);
 }
 
 public class Bullet
@@ -266,6 +278,7 @@ public class AsteroidGenerator
     public AsteroidGenerator()
     {
         Asteroids = new();
+        DestroyedAsteroids = new();
     }
 
     public void Update()
@@ -300,23 +313,35 @@ public class AsteroidGenerator
             int screenWidth = Globals.GameWindow.X;
             int screenHeight = Globals.GameWindow.Y;
 
+            float zoom = 4f;
+            float visibleWidth = screenWidth / zoom;
+            float visibleHeight = screenHeight / zoom;
+
+            float centerX = screenWidth / 2f;
+            float centerY = screenHeight / 2f;
+
+            float minX = centerX - (visibleWidth / 2);
+            float maxX = centerX + (visibleWidth / 2);
+            float minY = centerY - (visibleHeight / 2);
+            float maxY = centerY + (visibleHeight / 2);
+
             switch (side)
             {
                 case 0: // Up
-                    position = new(_random.Next(0, screenWidth), -5);
-                    target = new(_random.Next(0, screenWidth), screenHeight + 5);
+                    position = new(_random.Next((int)minX, (int)maxX), minY - 10);
+                    target = new(_random.Next((int)minX, (int)maxX), maxY + 10);
                     break;
                 case 1: // Down
-                    position = new(_random.Next(0, screenWidth), screenHeight + 5);
-                    target = new(_random.Next(0, screenWidth), -5);
+                    position = new(_random.Next((int)minX, (int)maxX), maxY + 10);
+                    target = new(_random.Next((int)minX, (int)maxX), minY - 10);
                     break;
                 case 2: // Left
-                    position = new(-5, _random.Next(0, screenHeight));
-                    target = new(screenWidth + 5, _random.Next(0, screenHeight));
+                    position = new(minX - 10, _random.Next((int)minY, (int)maxY));
+                    target = new(maxX + 10, _random.Next((int)minY, (int)maxY));
                     break;
                 case 3: // Right
-                    position = new(screenWidth + 5, _random.Next(0, screenHeight));
-                    target = new(-5, _random.Next(0, screenHeight));
+                    position = new(maxX + 10, _random.Next((int)minY, (int)maxY));
+                    target = new(minX - 10, _random.Next((int)minY, (int)maxY));
                     break;
             }
 
@@ -342,11 +367,15 @@ public class AsteroidGenerator
                 Asteroid asteroid = DestroyedAsteroids[i];
                 Vector2 position = asteroid.Position;
                 Vector2 direction = asteroid.Direction;
-                Asteroid asteroidFragment = new(position, direction, asteroid.Speed / 2, 0.9f, 0);
-                Asteroids.Add(asteroidFragment);
+                
+                Asteroid firstAsteroidFragment = new(position, direction, asteroid.Speed / 2, 0.9f, 0);
+                Asteroids.Add(firstAsteroidFragment);
 
                 Asteroid secondAsteroidFragment = new(position, -direction, asteroid.Speed / 2, 0.9f, 0);
+                Asteroids.Add(secondAsteroidFragment);
             }
         }
+
+        DestroyedAsteroids.Clear();
     }
 }
