@@ -16,39 +16,56 @@ public static class Globals
     public static GraphicsDevice GraphicsDevice { get; set; }
     public static Point GameWindow { get; set; } = new(1024, 768);
     public static Matrix GameMatrix { get; set; }
+    private static Texture2D Pixel;
 
-    public static void Update(GameTime gameTime)
+    public static void Initialize(ContentManager contentManager, SpriteBatch spriteBatch, GraphicsDevice graphicsDevice)
     {
-        Time = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        ContentManager = contentManager;
+        SpriteBatch = spriteBatch;
+        GraphicsDevice = graphicsDevice;
+
+        Pixel = new(GraphicsDevice, 1, 1);
+        Pixel.SetData([Color.White]);
+
+        GetMatrix();
     }
+
+    public static void Update(GameTime gameTime) =>
+        Time = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
     public static void GetMatrix()
     {
-        float zoom = 4f;
+        float zoom = 1f;
 
         Vector2 center = new(GameWindow.X / 2, GameWindow.Y / 2);
 
         GameMatrix = Matrix.CreateTranslation(-center.X, -center.Y, 0) *
                      Matrix.CreateScale(zoom, zoom, 1f) *
-                     Matrix.CreateTranslation(center.X, center.Y , 0);
+                     Matrix.CreateTranslation(center.X, center.Y, 0);
     }
 
     public static void DrawLine(Vector2 firstPoint, Vector2 secondPoint)
     {
-        Texture2D pixel = new(GraphicsDevice, 1, 1);
-        pixel.SetData([Color.White]);
-
         float distance = Vector2.Distance(firstPoint, secondPoint);
         float angle = (float)Math.Atan2(secondPoint.Y - firstPoint.Y, secondPoint.X - firstPoint.X);
 
-        SpriteBatch.Draw(pixel, firstPoint, null, Color.White, angle, Vector2.Zero, new Vector2(distance, 1f), SpriteEffects.None, 0f);
+        SpriteBatch.Draw(Pixel, firstPoint, null, Color.White, angle, Vector2.Zero, new Vector2(distance, 0.5f), SpriteEffects.None, 0f);
+    }
+
+    public static Vector2 RotatePoint(Vector2 localPoint, float rotation)
+    {
+        float cos = MathF.Cos(rotation);
+        float sin = MathF.Sin(rotation);
+
+        return new(localPoint.X * cos - localPoint.Y * sin,
+                   localPoint.X * sin + localPoint.Y * cos);
     }
 }
 
 public class InputManager
 {
     public static InputManager Instance { get; private set; }
-    
+
     private KeyboardState _currentKeyboardState;
     private KeyboardState _previousKeyboardState;
 
@@ -61,7 +78,7 @@ public class InputManager
 
     public static void Update()
     {
-        if (Instance is null ) return;
+        if (Instance is null) return;
 
         Instance._previousKeyboardState = Instance._currentKeyboardState;
         Instance._currentKeyboardState = Keyboard.GetState();
@@ -157,29 +174,35 @@ public class Player
 
     public void Draw()
     {
-        Vector2 centerPoint = Position;
+        Vector2 p1 = new(20, 0);
+        Vector2 p2 = new(-15, -12);
+        Vector2 p3 = new(-10, 0);
+        Vector2 p4 = new(-15, 12);
 
-        Vector2 firstPoint = new(centerPoint.X + 30, centerPoint.Y);
-        Vector2 secondPoint = new(centerPoint.X, centerPoint.Y - 10);
-        Vector2 thirdPoint = new(centerPoint.X, centerPoint.Y + 10);
+        Vector2 tf1 = Position + Globals.RotatePoint(p1, Rotation);
+        Vector2 tf2 = Position + Globals.RotatePoint(p2, Rotation);
+        Vector2 tf3 = Position + Globals.RotatePoint(p3, Rotation);
+        Vector2 tf4 = Position + Globals.RotatePoint(p4, Rotation);
 
-        Globals.DrawLine(firstPoint, secondPoint);
-        Globals.DrawLine(firstPoint, thirdPoint);
+        Globals.DrawLine(tf1, tf2);
+        Globals.DrawLine(tf2, tf3);
+        Globals.DrawLine(tf3, tf4);
+        Globals.DrawLine(tf4, tf1);
 
         foreach (Bullet bullet in Bullets) bullet.Draw();
     }
-        
+
     private void HandleInput()
     {
         if (InputManager.IsKeyDown(Keys.Right)) Rotation += 0.04f;
         if (InputManager.IsKeyDown(Keys.Left)) Rotation -= 0.04f;
         if (InputManager.IsKeyDown(Keys.Up)) Speed += 50f * Globals.Time;
-        if (InputManager.IsKeyPressed(Keys.Z)) Fire();
+        if (InputManager.IsKeyDown(Keys.Z)) Fire();
     }
-    
+
     private void Fire()
     {
-        if (_fireRate < 0.5f) return;
+        if (_fireRate <= 0.5f) return;
 
         Bullet bullet = new(Position, Direction, 0.5f);
         Bullets.Add(bullet);
@@ -190,7 +213,8 @@ public class Player
 
 public class Bullet
 {
-    public Texture2D Texture { get; private set; }
+    private readonly BulletFlyweight _bulletFlyweight;
+
     public Vector2 Position { get; private set; }
     public Rectangle Bounds { get; private set; }
     public Vector2 Direction { get; private set; }
@@ -200,7 +224,7 @@ public class Bullet
 
     public Bullet(Vector2 position, Vector2 direction, float scale)
     {
-        Texture = Globals.ContentManager.Load<Texture2D>("bullet");
+        _bulletFlyweight = BulletFlyweightFactory.GetTexture();
         Position = position;
         Direction = direction;
         Speed = 100f;
@@ -215,18 +239,17 @@ public class Bullet
     }
 
     public void Draw() =>
-        Globals.SpriteBatch.Draw(Texture, Position, null, Color.White, 0f, new(Texture.Width / 2, Texture.Height / 2), Scale, SpriteEffects.None, 0f);
-
-    private void UpdateBounds() =>
-        Bounds = new((int)Position.X, (int)Position.Y, Texture.Width / 2, Texture.Height / 2);
+        Globals.SpriteBatch.Draw(_bulletFlyweight.Texture, Position, Bounds, Color.White, 0f, new(Bounds.Width / 2, Bounds.Height / 2), 1f, SpriteEffects.None, 0f);
 
     public void Destroy() =>
         IsDestroyed = true;
+
+    private void UpdateBounds() =>
+        Bounds = new((int)Position.X, (int)Position.Y, 3, 3);
 }
 
 public class Asteroid
 {
-    public Texture2D Texture { get; private set; }
     public Vector2 Position { get; private set; }
     public Rectangle Bounds { get; private set; }
     public Vector2 Direction { get; private set; }
@@ -240,7 +263,6 @@ public class Asteroid
 
     public Asteroid(Vector2 position, Vector2 direction, float speed, float scale, int level)
     {
-        Texture = _random.Next(0, 1) == 1 ? Globals.ContentManager.Load<Texture2D>("asteroid-one") : Globals.ContentManager.Load<Texture2D>("asteroid-two");
         Position = position;
         Direction = direction;
         Speed = speed;
@@ -257,14 +279,58 @@ public class Asteroid
         UpdateBounds();
     }
 
-    public void Draw() =>
-        Globals.SpriteBatch.Draw(Texture, Position, null, Color.White, Rotation, new(Texture.Width / 2, Texture.Height / 2), Scale, SpriteEffects.None, 0f);
+    public void Draw()
+    {
+        Vector2 p1 = new Vector2(0, 0) * Scale;
+        Vector2 p2 = new Vector2(15, 0) * Scale;
+        Vector2 p3 = new Vector2(25, -5) * Scale;
+        Vector2 p4 = new Vector2(25, -15) * Scale;
+        Vector2 p5 = new Vector2(20, -25) * Scale;
+        Vector2 p6 = new Vector2(25, -35) * Scale;
+        Vector2 p7 = new Vector2(20, -50) * Scale;
+        Vector2 p8 = new Vector2(15, -45) * Scale;
+        Vector2 p9 = new Vector2(10, -40) * Scale;
+        Vector2 p10 = new Vector2(-10, -25) * Scale;
+        Vector2 p11 = new Vector2(-10, -10) * Scale;
+        Vector2 p12 = new Vector2(5, -10) * Scale;
 
-    private void UpdateBounds() =>
-        Bounds = new((int)Position.X, (int)Position.Y, Texture.Width / 2 * (int)Scale, Texture.Height / 2 * (int)Scale);
+        Vector2 tf1 = Position + Globals.RotatePoint(p1, Rotation);
+        Vector2 tf2 = Position + Globals.RotatePoint(p2, Rotation);
+        Vector2 tf3 = Position + Globals.RotatePoint(p3, Rotation);
+        Vector2 tf4 = Position + Globals.RotatePoint(p4, Rotation);
+        Vector2 tf5 = Position + Globals.RotatePoint(p5, Rotation);
+        Vector2 tf6 = Position + Globals.RotatePoint(p6, Rotation);
+        Vector2 tf7 = Position + Globals.RotatePoint(p7, Rotation);
+        Vector2 tf8 = Position + Globals.RotatePoint(p8, Rotation);
+        Vector2 tf9 = Position + Globals.RotatePoint(p9, Rotation);
+        Vector2 tf10 = Position + Globals.RotatePoint(p10, Rotation);
+        Vector2 tf11 = Position + Globals.RotatePoint(p11, Rotation);
+        Vector2 tf12 = Position + Globals.RotatePoint(p12, Rotation);
+    
+        Globals.DrawLine(tf1, tf2);
+        Globals.DrawLine(tf2, tf3);
+        Globals.DrawLine(tf3, tf4);
+        Globals.DrawLine(tf4, tf5);
+        Globals.DrawLine(tf5, tf6);
+        Globals.DrawLine(tf6, tf7);
+        Globals.DrawLine(tf7, tf8);
+        Globals.DrawLine(tf8, tf9);
+        Globals.DrawLine(tf9, tf10);
+        Globals.DrawLine(tf10, tf11);
+        Globals.DrawLine(tf11, tf12);
+        Globals.DrawLine(tf12, tf1);
+    }
 
     public void Destroy() =>
         IsDestroyed = true;
+
+    private void UpdateBounds()
+    {
+        int width = (int)(50 * Scale);
+        int height = (int)(50 * Scale);
+
+        Bounds = new((int)Position.X - width / 2, (int)Position.Y - height / 2, width, height);
+    }
 }
 
 public class AsteroidGenerator
@@ -289,7 +355,7 @@ public class AsteroidGenerator
         foreach (Asteroid asteroid in Asteroids)
             asteroid.Update();
 
-        DestroyedAsteroids.AddRange( Asteroids.Where(x => x.IsDestroyed) );
+        DestroyedAsteroids.AddRange(Asteroids.Where(x => x.IsDestroyed));
         Asteroids.RemoveAll(x => x.IsDestroyed);
 
         SpawnAsteroidFragments();
@@ -313,17 +379,10 @@ public class AsteroidGenerator
             int screenWidth = Globals.GameWindow.X;
             int screenHeight = Globals.GameWindow.Y;
 
-            float zoom = 4f;
-            float visibleWidth = screenWidth / zoom;
-            float visibleHeight = screenHeight / zoom;
-
-            float centerX = screenWidth / 2f;
-            float centerY = screenHeight / 2f;
-
-            float minX = centerX - (visibleWidth / 2);
-            float maxX = centerX + (visibleWidth / 2);
-            float minY = centerY - (visibleHeight / 2);
-            float maxY = centerY + (visibleHeight / 2);
+            float minX = -5;
+            float maxX = screenWidth + 5;
+            float minY = -5;
+            float maxY = screenHeight + 5;
 
             switch (side)
             {
@@ -367,7 +426,7 @@ public class AsteroidGenerator
                 Asteroid asteroid = DestroyedAsteroids[i];
                 Vector2 position = asteroid.Position;
                 Vector2 direction = asteroid.Direction;
-                
+
                 Asteroid firstAsteroidFragment = new(position, direction, asteroid.Speed / 2, 0.9f, 0);
                 Asteroids.Add(firstAsteroidFragment);
 
@@ -377,5 +436,28 @@ public class AsteroidGenerator
         }
 
         DestroyedAsteroids.Clear();
+    }
+}
+
+// # applying flyweight pattern for store textures
+public class BulletFlyweightFactory
+{
+    private static BulletFlyweight _cache;
+
+    public static BulletFlyweight GetTexture()
+    {
+        if (_cache is null) _cache = new();
+        return _cache;
+    }
+}
+
+public class BulletFlyweight
+{
+    public Texture2D Texture { get; private set; }
+    
+    public BulletFlyweight()
+    {
+        Texture = new(Globals.GraphicsDevice, 1, 1);
+        Texture.SetData([Color.White]);
     }
 }

@@ -27,10 +27,7 @@ public class Game1 : Game
 
     protected override void LoadContent()
     {
-        Globals.GraphicsDevice = GraphicsDevice;
-        Globals.SpriteBatch = new SpriteBatch(Globals.GraphicsDevice);
-        Globals.ContentManager = Content;
-        Globals.GetMatrix();
+        Globals.Initialize(Content, new SpriteBatch(GraphicsDevice), GraphicsDevice);
 
         _gameManager = new();
     }
@@ -47,7 +44,7 @@ public class Game1 : Game
     {
         Globals.GraphicsDevice.Clear(Color.Black);
 
-        Globals.SpriteBatch.Begin(samplerState: SamplerState.PointClamp);
+        Globals.SpriteBatch.Begin(samplerState: SamplerState.PointClamp, transformMatrix: Globals.GameMatrix);
         _gameManager.Draw();
         Globals.SpriteBatch.End();
 
